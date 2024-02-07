@@ -698,7 +698,7 @@ int Pdr_ManGeneralize( Pdr_Man_t * p, int k, Pdr_Set_t * pCube, Pdr_Set_t ** ppP
         return -1;
     if ( RetValue == 0 )
     {
-        p->tGeneral += clock() - clk;
+        p->tGeneral += Abc_Clock() - clk;
         return 0;
     }
 
@@ -1035,7 +1035,7 @@ void Pdr_OutputCexToDir( Pdr_Par_t * pPars, Abc_Cex_t * pCex )
     FILE * pCexFile;
 
     iCexPathSize = snprintf( NULL, 0, "%s%d.aiw", pPars->pCexFilePrefix, pCex->iPo ) + 1;
-    pCexPath = malloc( iCexPathSize );
+    pCexPath = (char *)malloc( iCexPathSize );
     snprintf( pCexPath, iCexPathSize, "%s%d.aiw", pPars->pCexFilePrefix, pCex->iPo );
     Abc_Print( 1, "Writing CEX for output %d to %s\n", pCex->iPo, pCexPath );
     pCexFile = fopen( pCexPath, "w" );

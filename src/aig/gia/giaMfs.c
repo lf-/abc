@@ -153,12 +153,16 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     // skip POs due to box inputs
     Counter += nBbIns;
     assert( Counter == nMfsVars );
+
     // add functions of the boxes
     if ( p->pAigExtra )
     {
-        int iBbIn = 0, iBbOut = 0;
         assert( Gia_ManCiNum(p->pAigExtra) < 16 );
         Gia_ObjComputeTruthTableStart( p->pAigExtra, Gia_ManCiNum(p->pAigExtra) );
+    }
+
+    {
+        int iBbIn = 0, iBbOut = 0;
         curCi = nRealPis;
         curCo = 0;
         for ( k = 0; k < nBoxes; k++ )
@@ -168,6 +172,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
             // iterate through box outputs
             if ( !Tim_ManBoxIsBlack(pManTime, k) ) //&& Tim_ManBoxInputNum(pManTime, k) <= 6 )
             {
+                assert(p->pAigExtra);
                 // collect truth table leaves
                 Vec_IntClear( vLeaves );
                 for ( i = 0; i < nBoxIns; i++ )
@@ -267,14 +272,18 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
             curCi += nBoxOuts;
         }
         curCo += nRealPos;
-        Gia_ObjComputeTruthTableStop( p->pAigExtra );
         // verify counts
         assert( curCi == Gia_ManCiNum(p) );
         assert( curCo == Gia_ManCoNum(p) );
-        assert( curCi - nRealPis == Gia_ManCoNum(p->pAigExtra) );
         assert( iBbIn  == nBbIns );
         assert( iBbOut == nBbOuts );
     }
+
+    if (p->pAigExtra) {
+        Gia_ObjComputeTruthTableStop( p->pAigExtra );
+        assert( curCi - nRealPis == Gia_ManCoNum(p->pAigExtra) );
+    }
+
     // finalize 
     Vec_IntFree( vLeaves );
     return Sfm_NtkConstruct( vFanins, nBbOuts + nRealPis, nRealPos + nBbIns, vFixed, vEmpty, vDenied, vTruths, vStarts, vTruths2 );
@@ -512,11 +521,6 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     int nFaninMax, nNodes;
     assert( Gia_ManRegNum(p) == 0 );
     assert( p->vMapping != NULL );
-    if ( p->pManTime != NULL && p->pAigExtra == NULL )
-    {
-        Abc_Print( 1, "Timing manager is given but there is no GIA of boxes.\n" );
-        return NULL;
-    }
     if ( p->pManTime != NULL && p->pAigExtra != NULL && Gia_ManCiNum(p->pAigExtra) > 15 )
     {
         Abc_Print( 1, "Currently \"&mfs\" cannot process the network containing white-boxes with more than 15 inputs.\n" );

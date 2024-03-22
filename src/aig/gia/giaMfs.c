@@ -381,6 +381,15 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
             continue;
         }
         Vec_IntClear( vLeaves );
+
+        // handle internal CIs first, before we go looking for vLeaves
+        if ( iGroup != -1 && Abc_LitIsCompl(iGroup) )
+        {
+            //Dau_DsdPrintFromTruth( pTruth, Vec_IntSize(vLeaves) );
+            iLitNew = Gia_ManAppendCi( pNew );
+            goto done;
+        }
+
         Vec_IntForEachEntry( vArray, Fanin, k )
         {
             iLitNew = Vec_IntEntry( vMfs2Gia, Fanin );  assert( iLitNew >= 0 );
@@ -405,17 +414,13 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
             else
                 iLitNew = Gia_ManFromIfLogicCreateLut( pNew, pTruth, vLeaves, vCover, vMapping, vMapping2 );
         }
-        else if ( Abc_LitIsCompl(iGroup) ) // internal CI
-        {
-            //Dau_DsdPrintFromTruth( pTruth, Vec_IntSize(vLeaves) );
-            iLitNew = Gia_ManAppendCi( pNew );
-        }
         else // internal CO
         {
             assert( pTruth[0] == uTruthVar || pTruth[0] == ~uTruthVar );
             iLitNew = Gia_ManAppendCo( pNew, Abc_LitNotCond(Vec_IntEntry(vLeaves, 0), pTruth[0] == ~uTruthVar) );
             //printf("Group = %d. po = %d\n", iGroup>>1, iMfsId );
         }
+done:
         Vec_IntWriteEntry( vMfs2Gia, iMfsId, iLitNew );
     }
     Vec_IntFree( vCover );

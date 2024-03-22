@@ -58,6 +58,7 @@ void Sfm_ParSetDefault( Sfm_Par_t * pPars )
     pPars->fAllBoxes    =    0;  // enable preserving all boxes
     pPars->fVerbose     =    0;  // enable basic stats
     pPars->fVeryVerbose =    0;  // enable detailed stats
+    pPars->fTestReimport =   0;  // enable testing of re-import
 }
 
 /**Function*************************************************************

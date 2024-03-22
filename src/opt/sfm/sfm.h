@@ -73,6 +73,7 @@ struct Sfm_Par_t_
     int             fDelayVerbose; // enable delay stats
     int             fVerbose;      // enable basic stats
     int             fVeryVerbose;  // enable detailed stats
+    int             fTestReimport; // enable testing of re-import
 };
 
 ////////////////////////////////////////////////////////////////////////

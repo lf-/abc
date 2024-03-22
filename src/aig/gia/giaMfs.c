@@ -517,6 +517,8 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     // collect information
     pNtk = Gia_ManExtractMfs( p );
+    if (pPars->fTestReimport)
+        goto reimport;
     // perform optimization
     nNodes = Sfm_NtkPerform( pNtk, pPars );
     if ( nNodes == 0 )
@@ -529,6 +531,7 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     else
     {
+    reimport:
         pNew = Gia_ManInsertMfs( p, pNtk, pPars->fAllBoxes );
         if( pPars->fVerbose )
             Abc_Print( 1, "The network has %d nodes changed by \"&mfs\".\n", nNodes );

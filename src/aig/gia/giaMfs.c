@@ -58,6 +58,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     Vec_Wec_t * vFanins; // mfs data
     Vec_Str_t * vFixed;  // mfs data 
     Vec_Str_t * vEmpty;  // mfs data
+    Vec_Str_t * vDenied; // mfs data
     Vec_Wrd_t * vTruths; // mfs data
     Vec_Int_t * vArray;
     Vec_Int_t * vStarts;
@@ -81,9 +82,14 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     vFanins  = Vec_WecStart( nMfsVars );
     vFixed   = Vec_StrStart( nMfsVars );
     vEmpty   = Vec_StrStart( nMfsVars );
+    vDenied  = Vec_StrStart( nMfsVars );
     vTruths  = Vec_WrdStart( nMfsVars );
     vStarts  = Vec_IntStart( nMfsVars );
     vTruths2 = Vec_WrdAlloc( 10000 );
+    // deny the PIs which are modeling blackbox outputs from being considered
+    // in substitutions
+    for (int i = 0; i < nBbOuts; i++)
+        Vec_StrWriteEntry( vDenied, i, (char)1 );
     // set internal PIs
     Gia_ManCleanCopyArray( p );
     Gia_ManForEachCiId( p, Id, i )
@@ -232,6 +238,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
                     Vec_IntFill( vArray, 1, iBbOut++ );
                     Vec_StrWriteEntry( vFixed, Counter, (char)1 );
                     Vec_StrWriteEntry( vEmpty, Counter, (char)1 );
+                    Vec_StrWriteEntry( vDenied, Counter, (char)1 );
                     Vec_WrdWriteEntry( vTruths, Counter, uTruths6[0] );
                 }
                 for ( i = 0; i < nBoxIns; i++ )
@@ -240,7 +247,9 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
                     pObj = Gia_ManCo( p, curCo + i );
                     Counter = Gia_ObjCopyArray( p, Gia_ObjId(p, pObj) );
                     // connect it with the special primary output (iBbIn)
-                    vArray = Vec_WecEntry( vFanins, nMfsVars - nBbIns + iBbIn++ );
+                    int poNum = nMfsVars - nBbIns + iBbIn++;
+                    vArray = Vec_WecEntry( vFanins, poNum );
+                    Vec_StrWriteEntry( vFixed, poNum, (char)1 );
                     assert( Vec_IntSize(vArray) == 0 );
                     Vec_IntFill( vArray, 1, Counter );
                 }
@@ -268,7 +277,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     }
     // finalize 
     Vec_IntFree( vLeaves );
-    return Sfm_NtkConstruct( vFanins, nBbOuts + nRealPis, nRealPos + nBbIns, vFixed, vEmpty, vTruths, vStarts, vTruths2 );
+    return Sfm_NtkConstruct( vFanins, nBbOuts + nRealPis, nRealPos + nBbIns, vFixed, vEmpty, vDenied, vTruths, vStarts, vTruths2 );
 }
 
 /**Function*************************************************************

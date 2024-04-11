@@ -58,6 +58,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     Vec_Wec_t * vFanins; // mfs data
     Vec_Str_t * vFixed;  // mfs data 
     Vec_Str_t * vEmpty;  // mfs data
+    Vec_Str_t * vDenied; // mfs data
     Vec_Wrd_t * vTruths; // mfs data
     Vec_Int_t * vArray;
     Vec_Int_t * vStarts;
@@ -81,9 +82,14 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     vFanins  = Vec_WecStart( nMfsVars );
     vFixed   = Vec_StrStart( nMfsVars );
     vEmpty   = Vec_StrStart( nMfsVars );
+    vDenied  = Vec_StrStart( nMfsVars );
     vTruths  = Vec_WrdStart( nMfsVars );
     vStarts  = Vec_IntStart( nMfsVars );
     vTruths2 = Vec_WrdAlloc( 10000 );
+    // deny the PIs which are modeling blackbox outputs from being considered
+    // in substitutions
+    for (int i = 0; i < nBbOuts; i++)
+        Vec_StrWriteEntry( vDenied, i, (char)1 );
     // set internal PIs
     Gia_ManCleanCopyArray( p );
     Gia_ManForEachCiId( p, Id, i )
@@ -147,12 +153,16 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
     // skip POs due to box inputs
     Counter += nBbIns;
     assert( Counter == nMfsVars );
+
     // add functions of the boxes
     if ( p->pAigExtra )
     {
-        int iBbIn = 0, iBbOut = 0;
         assert( Gia_ManCiNum(p->pAigExtra) < 16 );
         Gia_ObjComputeTruthTableStart( p->pAigExtra, Gia_ManCiNum(p->pAigExtra) );
+    }
+
+    {
+        int iBbIn = 0, iBbOut = 0;
         curCi = nRealPis;
         curCo = 0;
         for ( k = 0; k < nBoxes; k++ )
@@ -162,6 +172,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
             // iterate through box outputs
             if ( !Tim_ManBoxIsBlack(pManTime, k) ) //&& Tim_ManBoxInputNum(pManTime, k) <= 6 )
             {
+                assert(p->pAigExtra);
                 // collect truth table leaves
                 Vec_IntClear( vLeaves );
                 for ( i = 0; i < nBoxIns; i++ )
@@ -232,6 +243,7 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
                     Vec_IntFill( vArray, 1, iBbOut++ );
                     Vec_StrWriteEntry( vFixed, Counter, (char)1 );
                     Vec_StrWriteEntry( vEmpty, Counter, (char)1 );
+                    Vec_StrWriteEntry( vDenied, Counter, (char)1 );
                     Vec_WrdWriteEntry( vTruths, Counter, uTruths6[0] );
                 }
                 for ( i = 0; i < nBoxIns; i++ )
@@ -240,7 +252,9 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
                     pObj = Gia_ManCo( p, curCo + i );
                     Counter = Gia_ObjCopyArray( p, Gia_ObjId(p, pObj) );
                     // connect it with the special primary output (iBbIn)
-                    vArray = Vec_WecEntry( vFanins, nMfsVars - nBbIns + iBbIn++ );
+                    int poNum = nMfsVars - nBbIns + iBbIn++;
+                    vArray = Vec_WecEntry( vFanins, poNum );
+                    Vec_StrWriteEntry( vFixed, poNum, (char)1 );
                     assert( Vec_IntSize(vArray) == 0 );
                     Vec_IntFill( vArray, 1, Counter );
                 }
@@ -258,17 +272,21 @@ Sfm_Ntk_t * Gia_ManExtractMfs( Gia_Man_t * p )
             curCi += nBoxOuts;
         }
         curCo += nRealPos;
-        Gia_ObjComputeTruthTableStop( p->pAigExtra );
         // verify counts
         assert( curCi == Gia_ManCiNum(p) );
         assert( curCo == Gia_ManCoNum(p) );
-        assert( curCi - nRealPis == Gia_ManCoNum(p->pAigExtra) );
         assert( iBbIn  == nBbIns );
         assert( iBbOut == nBbOuts );
     }
+
+    if (p->pAigExtra) {
+        Gia_ObjComputeTruthTableStop( p->pAigExtra );
+        assert( curCi - nRealPis == Gia_ManCoNum(p->pAigExtra) );
+    }
+
     // finalize 
     Vec_IntFree( vLeaves );
-    return Sfm_NtkConstruct( vFanins, nBbOuts + nRealPis, nRealPos + nBbIns, vFixed, vEmpty, vTruths, vStarts, vTruths2 );
+    return Sfm_NtkConstruct( vFanins, nBbOuts + nRealPis, nRealPos + nBbIns, vFixed, vEmpty, vDenied, vTruths, vStarts, vTruths2 );
 }
 
 /**Function*************************************************************
@@ -381,6 +399,15 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
             continue;
         }
         Vec_IntClear( vLeaves );
+
+        // handle internal CIs first, before we go looking for vLeaves
+        if ( iGroup != -1 && Abc_LitIsCompl(iGroup) )
+        {
+            //Dau_DsdPrintFromTruth( pTruth, Vec_IntSize(vLeaves) );
+            iLitNew = Gia_ManAppendCi( pNew );
+            goto done;
+        }
+
         Vec_IntForEachEntry( vArray, Fanin, k )
         {
             iLitNew = Vec_IntEntry( vMfs2Gia, Fanin );  assert( iLitNew >= 0 );
@@ -405,17 +432,13 @@ Gia_Man_t * Gia_ManInsertMfs( Gia_Man_t * p, Sfm_Ntk_t * pNtk, int fAllBoxes )
             else
                 iLitNew = Gia_ManFromIfLogicCreateLut( pNew, pTruth, vLeaves, vCover, vMapping, vMapping2 );
         }
-        else if ( Abc_LitIsCompl(iGroup) ) // internal CI
-        {
-            //Dau_DsdPrintFromTruth( pTruth, Vec_IntSize(vLeaves) );
-            iLitNew = Gia_ManAppendCi( pNew );
-        }
         else // internal CO
         {
             assert( pTruth[0] == uTruthVar || pTruth[0] == ~uTruthVar );
             iLitNew = Gia_ManAppendCo( pNew, Abc_LitNotCond(Vec_IntEntry(vLeaves, 0), pTruth[0] == ~uTruthVar) );
             //printf("Group = %d. po = %d\n", iGroup>>1, iMfsId );
         }
+done:
         Vec_IntWriteEntry( vMfs2Gia, iMfsId, iLitNew );
     }
     Vec_IntFree( vCover );
@@ -498,11 +521,6 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     int nFaninMax, nNodes;
     assert( Gia_ManRegNum(p) == 0 );
     assert( p->vMapping != NULL );
-    if ( p->pManTime != NULL && p->pAigExtra == NULL )
-    {
-        Abc_Print( 1, "Timing manager is given but there is no GIA of boxes.\n" );
-        return NULL;
-    }
     if ( p->pManTime != NULL && p->pAigExtra != NULL && Gia_ManCiNum(p->pAigExtra) > 15 )
     {
         Abc_Print( 1, "Currently \"&mfs\" cannot process the network containing white-boxes with more than 15 inputs.\n" );
@@ -517,6 +535,8 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     // collect information
     pNtk = Gia_ManExtractMfs( p );
+    if (pPars->fTestReimport)
+        goto reimport;
     // perform optimization
     nNodes = Sfm_NtkPerform( pNtk, pPars );
     if ( nNodes == 0 )
@@ -529,6 +549,7 @@ Gia_Man_t * Gia_ManPerformMfs( Gia_Man_t * p, Sfm_Par_t * pPars )
     }
     else
     {
+    reimport:
         pNew = Gia_ManInsertMfs( p, pNtk, pPars->fAllBoxes );
         if( pPars->fVerbose )
             Abc_Print( 1, "The network has %d nodes changed by \"&mfs\".\n", nNodes );
